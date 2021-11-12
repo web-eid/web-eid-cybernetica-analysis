@@ -1,0 +1,59 @@
+\chapter{Threats and assumptions}
+
+This chapter contains the analysis part of this document. We begin by describing the methodology used for the analysis. Then the system components relevant for the analysis are listed. Section~\ref{sec:threats} contains the list of threats that directly affect the Web eID architecture. Section~\ref{sec:out_of_scope_threats} lists the threats that are not in the scope of the Web eID architecture but which can affect its security. Finally, the chapter is concluded by Sections~\ref{sec:satisfiable_assumptions} and \ref{sec:unsatisfiable_assumptions}, which give an overview of the assumptions that were used in the analysis. These assumptions are classified into two categories, the first one describes the assumptions that can be satisfied with the current technology, and the second one the assumptions that can not be satisfied with the current technology.
+
+To create the list of threats in a systematic way, we fixed the scope of the analysis, identified the relevant digital assets present in the Web eID architecture, and considered possible actions an attacker could do (Create, Read/Use/Copy, Update, Delete) on them. Based on that we created a list of threats that covers all possible combinations of assets and the actions the attacker could do on them. However, by using such methodology also the non-relevant threats are listed. Thus, some of the listed threats are not relevant for the architecture or are not in the main scope of this analysis. We still include them for the sake of completeness. In principle it would also be possible to classify the threats further by also including the location of the attacker. However, we decided not to do that as for most of the threats the location is fixed by the context. 
+
+
+\section{System components}
+
+\subsection{Assets}
+The system has the following (digital) assets:
+\begin{itemize}
+\item client's authentication key (part of 1st key pair),
+\item client's signing key (part of 2nd key pair),
+\item client's certificate, containing public key from the ID-card (either from 1st or 2nd key pair),
+\item client's certificate trust store (browser or OS based),
+\item service provider's long term private key,
+\item service provider's certificate, which is signed by a trusted CA,
+\item eID CA's signing key, which was used to issue the certificates for the ID-card,
+\item CA's signing key, which was used to issue the certificate for the service provider,
+\item client's PIN1, which unlocks the authentication key,
+\item client's PIN2, which unlocks the signing key,
+\item data, which client intends to sign,
+\item hash of the data, which client intends to sign,
+\item signed hash of the data, which client intended to sign,
+\item container, which contains signed data,
+\item service provider's authentication challenge,
+\item unsigned authentication token,
+\item hash of the unsigned authentication token,
+\item signed hash of the authentication token together with the authentication token,
+\item OCSP response for the client certificate,
+\item session cookie set by the service provider.
+\end{itemize}
+
+
+%\subsection{Subjects}
+
+
+\subsection{Locations}
+Events may take place in the following locations:
+\begin{itemize}
+\item service provider's server,
+\item communication channel between end-user's browser and service provider's server,
+\item end-user's browser,
+\item channel between end-user's browser and Web eID native application controller component\footnote{\url{https://github.com/open-eid/browser-extensions2\#native-application}},
+\item channels between application controller component and \emph{libgui}, \emph{libpcsc}, \emph{libeid} components,
+\item communication channel, which is used to interface with the smart card,
+\item firmware / driver of the smart card reader.
+\end{itemize}
+
+
+\subsection{Actions}
+\begin{itemize}
+	\item Create -- attacker manages to create a valid asset.
+	\item Read, Use, Copy -- attacker gains read-only access to an asset.
+	\item Update -- attacker (successfully) modifies an asset.
+	\item Delete -- attacker removes an asset either from storage or from communication channel.
+\end{itemize}
+

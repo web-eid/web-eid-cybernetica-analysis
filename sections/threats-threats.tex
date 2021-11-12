@@ -1,0 +1,714 @@
+\newpage
+\section{Threats}
+\label{sec:threats}
+
+
+\subsection{Attacker reads/uses/copies a certificate.}
+The certificate can not be successfully used for authentication and signing without having access to the corresponding private key.
+
+The certificate itself can be considered to be public information. The TLS certificates of web sites are public. Although the ID-card certificates contain somewhat private information about the client these certificates can be publicly queried using the personal identification code. The signing certificate is also included in the digital signature container (e.g., BDOC, ASiC-E).
+
+However, the client may not want to disclose her identity to the service provider. Thus, the user has to decide whether the certificate should be sent to the service provider once authentication is initiated. By bypassing this check the website could track the user without user's consent. In addition, the client certificate should be encrypted when it is sent to the server.
+
+Possible mitigations:
+\begin{itemize}
+\item The project documentation states that the implementation must require the user to interact to choose whether to continue with the authentication process and share the certificate with the service provider\footnote{\url{https://github.com/open-eid/browser-extensions2}}.
+
+\item The information in the client certificate can be protected by delivering the certificate only over a TLS channel. This is not done with TLS-CCA~\cite{DBLP:conf/ndss/Parsovs14}, as the client certificate is transmitted in cleartext during the TLS-CCA handshake. The new Web eID architecture solves this issue.
+\end{itemize}
+
+ 
+
+
+
+\subsection{Attacker creates a new certificate trust store for the client.}
+\label{threat:create-trust-store}
+For an attacker it is sufficient to add one trusted CA to the trust store to be able to impersonate the service provider. Thus, this threat is equivalent to the threat in Section~\ref{threat:update-trust-store}. The threat can partially be mitigated by using the certificate validation based MITM protection, which is described in Section~\ref{sec:cert_validation}.
+
+
+\subsection{Attacker reads/uses/copies client's certificate trust store.}
+\label{threat:read-trust-store}
+The certificates in the trust store can be considered to be public. Thus, the attacker does not get an advantage by just getting read access to these certificates. 
+
+\subsection{Attacker updates client's certificate trust store.}
+\label{threat:update-trust-store}
+By adding a root certificate to client's trust store the attacker will  be able to issue certificates, which are trusted by client's browser or operating system.
+
+Thus, the attacker is able to impersonate any web service, which does not use pinned certificate or pinned public key. Therefore, with the help of DNS spoofing it is possible to run a man-in-the-middle attack against such web sites. It is important to understand that Certificate Transparency may not work for locally issued certificates as the functionality depends on browser configuration. For example, Google Chrome follows Certificate Transparency only for public certificates\footnote{\url{https://groups.google.com/a/chromium.org/forum/\#!msg/ct-policy/wHILiYf31DE/iMFmpMEkAQAJ}}. 
+
+Possible mitigations:
+\begin{itemize}
+\item The service provider could theoretically use certificate or public key pinning as mitigation. However, it is difficult to implement pinning correctly and it may cause issues with stability. This is the reason why several browser vendors have removed support for HKPK\footnote{\url{https://www.chromestatus.com/feature/5903385005916160}}\footnote{\url{https://www.fxsitecompat.dev/en-CA/docs/2019/http-public-key-pinning-is-no-longer-supported/}}.
+
+\item By forcing the client to sign the service provider's certificate fingerprint along with the challenge, the real service provider can detect a MITM attack during the authentication phase by comparing the signed certificate fingerprint with the fingerprint of its own certificate. More information about the certificate validation based MITM protection can be found from Section~\ref{sec:cert_validation}. This measure does not protect the session identifier against MITM attacks that are conducted after the authentication phase during a new TLS negotiation.
+\end{itemize}
+
+
+\subsection{Attacker deletes client's certificate trust store or parts of it.}
+\label{threat:delete-trust-store}
+In case a trusted root certificate is removed from the trust store, the client may not be able to visit web sites or use web services, which rely on that root certificate. Thus, such action can lead to a denial of service attack. However, the attack does not scale as it requires either remote or physical access to end-user's device.
+
+
+
+
+
+\subsection{Attacker creates data, which is sent to be signed.}
+\label{threat:create-data-for-signing}
+It must not be possible to sign two different documents by issuing a digital signature for only one of these documents. During the signing process the hash of the document is signed and not the file itself. Therefore, it must not be possible to find two different documents that give the same hash value. This must be prevented by the design and choice of the corresponding hash function. 
+
+Thus, we assume in this analysis that the attacker is not able to break the collision resistance property of the cryptographic hash function that is used for signing.
+
+This threat is relevant both for authentication and signing as in both cases a value is sent to be signed with one of client's private keys. The attacker could either initiate the signing process on its own and trick the user into entering the PIN code or replace the data that the client intends to sign (see~\ref{threat:update-data-for-signing}). The service provider may also play the role of an attacker as it could display information that is different from the data that is going to be signed by the client. See, Section~\ref{threat:create-hash-for-signing} for more info.
+
+Relevant locations: 
+\begin{itemize}
+\item Service provider
+\item Communication channel
+\item Client's browser
+\item Client device's operating system
+\end{itemize}
+
+Possible mitigations:
+\begin{itemize}
+\item The integrity of the communication channel is protected by TLS.
+
+\item The user should always be able to view what is being signed. This may prevent the malicious or compromised service provider from tricking the user into signing the data that was created by the attacker. 
+
+\item The user should be able to download the signature as it can be later used as a legal proof in case of fraud. Without having the possibility to download and store the signed information the client has no basis to dispute the legality of the signature. 
+
+\item An independent card reader with a trusted display could allow the client read and verify what is being signed.
+
+\item A collision resistant cryptographic hash function must be used for signing.
+\end{itemize}
+
+
+\subsection{Attacker reads/uses/copies data, which is sent to be signed.}
+\label{threat:read-data-for-signing}
+For legally binding signatures this is generally not a threat as signing does not provide confidentiality. In case confidentiality is required, it has to be achieved with other measures like encryption.
+
+For authentication, see~\ref{threat:read-authchallenge}. 
+
+
+\subsection{Attacker updates data, which is sent to be signed.}
+\label{threat:update-data-for-signing}
+We assume in this analysis that the attacker is not able to break the collision resistance property of the cryptographic hash function that is used for signing. For more info, see~\ref{threat:create-data-for-signing}.
+
+This threat is relevant both for authentication and signing as in both cases a value is sent to be signed with one of the private keys. Attacker's actions can be seen as a man-in-the-middle attack where the attacker replaces the initial value that the card owner wanted to sign. Such an attack works even in the case where PIN-pad is used and when the attacker does not have access to the PIN codes. The user is willing to enter the PIN-code to complete the current action and therefore does not expect to sign a different value. The attack can be hidden by showing an error which the users are quite used to, which in turn means that the attack might stay unnoticed.
+
+In case of issuing a legally binding signature, this attack can lead to legal dispute as the attacker is able to decide what should be signed. The service provider may also play the role of an attacker as the service provider could display information that is different from the data that is going to be signed by the client. See, Section~\ref{threat:create-hash-for-signing} for more info.
+
+In case of authentication, the attacker can replace the authentic challenge sent by one service provider with a challenge from another service provider in order to get access to the client's account, which is connected with the second service provider.
+
+Locations for this attack:
+\begin{itemize}
+	\item A malicious service provider could  display to the client one value but may ask to sign a different value.
+	\item Browser (e.g. using a malicious browser extension) can imitate the behaviour of a valid ID-card extension. In addition, currently it is not possible to limit the access that Google Chrome and Firefox extensions have, and it is quite common for them to ask permission to access and modify the content on all web pages. 
+	
+	\item An attacker with root access to the operating system can modify the messages sent to be signed. It is unclear whether the data sent to be signed can be invisibly replaced by a regular user. This may differ depending on the used operating system. We give a recommendation in Section~\ref{rec:modeling-runtime-environment} to study such issues.
+	
+	\item A malicious smart card reader could replace the data that is sent to be signed.
+\end{itemize}
+
+Possible mitigations:
+\begin{itemize}
+\item The integrity of the communication channel is protected by TLS.
+
+\item The user should always be able to view what is being signed. This may prevent the attacker from changing the data which the client expects to sign or allow the client to detect the modification. 
+
+\item The user should be able to download the signature as it can be later used as a legal proof in case of fraud. Without having the possibility to download and store the signed information the client has no basis to dispute the legality of the signature. 
+
+\item Using a trusted device to display the document / value / hash that is going to be signed. The device should calculate the hash on its own.
+	
+\item A collision resistant cryptographic hash function must be used for signing.
+\end{itemize}
+
+
+
+
+
+
+
+\subsection{Attacker creates a new hash, which is sent to be signed.}
+\label{threat:create-hash-for-signing}
+We assume in this analysis that the attacker is not able to break the collision resistance property of the cryptographic hash function that is used for signing. For more info, see~\ref{threat:create-data-for-signing}.
+
+In case the attacker can choose which hash will be signed, the attacker has the power to issue legally binding signatures without the client knowing what was signed. It may also allow the attacker to get a signature for a selected authentication challenge and thereby get access to the chosen service without the client knowing about it.
+
+The information / document displayed in the signing application  or web page is not relevant if the attacker can replace the hash, which is sent to be signed. Attacker's actions can be seen as a man-in-the-middle attack between the user interface and the API, which communicates with the smart card. The attacker could replace the initial value that the card owner wanted to sign. Such an attack works even in the case where PIN-pad is used and when the attacker does not have access to the PIN codes. The user is willing to enter the PIN-code to complete the current action and therefore does not expect to sign something different.
+
+This threat is relevant both for authentication and signing. First, we consider the case where the attacker has infected the client's computer and is able to select which hash will be signed. Second, we consider the case that the service provider sends the hash to the client and the value is manipulated either by the service provider or  while sent over the communication channel.
+
+The hash value could be replaced in the browser or while it is being sent to the smart card reader. It is unclear whether the hash that is sent to be signed can be invisibly replaced by a non administrative user. This may differ depending on the used operating system. We give a recommendation in Section~\ref{rec:modeling-runtime-environment} to study such issues.
+
+We assume that TLS is properly configured and that the attacker is not able to modify the integrity of the messages sent over TLS. However, the client has to trust that the service provider is not malicious when giving a signature with Web eID. In case the service provider calculates the hash that is to be signed by the client, the client can not verify what is actually being signed. To do the verification the client would need to be able to download the data such that the data could be validated before calculating the hash on the client side.  There are issues with both validating specially formatted data and with downloading large files. Thus, the initial version of Web eID does not provide such functionality. 
+
+Possible mitigations:
+\begin{itemize}
+\item To use a trusted smart card reader which is able to display both the information that is being signed along with the hash that is calculated by the smart card reader. Unfortunately such devices are not available on the market.
+
+\item The client could protect herself against a malicious service provider by calculating the hash of the data locally.
+
+\item The client should be able to access the signed documents to see what was actually signed. This information could be used as proof when taking legal action against a malicious service provider.
+\end{itemize}
+
+
+\subsection{Attacker reads/uses/copies the hash, which is sent to be signed.}
+\label{threat:read-hash-for-signing}
+For legally binding signatures this is generally not a threat as in most cases the data, which was hashed can not be restored from the hash. However, in some cases the format of the signed information is predictable and the attacker could use a brute force approach on only a few fields in the document to try to find out what was hashed. This threat is relevant when the signed information is confidential.
+
+For authentication, see~\ref{threat:read-data-for-signing}.
+
+Possible mitigations:
+\begin{itemize}
+\item When the data that is going to be signed contains sufficient randomness, the attacker is not able to find the input to the hash function that gives the corresponding hash. 
+\end{itemize}
+
+
+\subsection{Attacker updates the hash, which is sent to be signed.}
+\label{threat:update-hash-for-signing}
+This is equivalent to~\ref{threat:create-hash-for-signing}.
+
+
+
+
+
+\subsection{Attacker creates a signed hash, which is signed with client's private key.}
+\label{threat:create-signed-hash}
+We assume that the attacker is not able to create client's private key, see~\ref{threat:create-private-key}.
+
+This threat is relevant both for authentication and signing. In order to issue a signature without waiting for the interaction of the user, the attacker needs at least remote access to both the smart card and the corresponding PIN code (see~\ref{threat:read-pin}). Thus, we consider the case where the attacker has infected the user's computer and is able to sign the hash of his choice.
+
+In the case of authentication the attacker may be able to sign a challenge, which gives access to the corresponding service. It is important to note that when card's authentication security environment is open, it can be used without providing PIN1. For the discussion related to card's authentication security environment, see Section~\ref{subsec:separatekeypairs}.
+
+
+It is unclear whether the attacker needs administrative permissions to communicate with the smart card, which is in the reader. This may depend on the used operating system due to the differences in the interfaces. We give a recommendation in Section~\ref{rec:modeling-runtime-environment} to study such issues.
+
+Possible mitigations:
+\begin{itemize}
+\item Use a smart card reader with a PIN-pad that only allows to enter the PIN-code from the PIN-pad.
+\item A partial mitigation is to allow notifications to be enabled, which would inform the card owner e.g., when a new signature is given. This could prevent further damage and might help to dispute the validity of the signature.
+\end{itemize}
+
+
+\subsection{Attacker reads/uses/copies the signed hash, which is signed with client's private key.}
+\label{threat:read-signed-hash}
+For legally binding signatures this is generally not a threat. However, there are some corner cases where the hash value may have to be confidential, these are discussed in~\ref{threat:read-hash-for-signing}.
+
+For authentication, the signed hash can be combined into a valid token, which can be used to initiate a session. Therefore, accessing the signed hash can lead to the hijacking of the corresponding session.
+
+Possible mitigations:
+\begin{itemize}
+\item Partial mitigation: the signed hash must be accepted only once by the service provider to initiate the session.
+\item Partial mitigation: the challenge must have a limited lifespan after which it expires and after that the signed response does not initiate a new session. The service provider has to track the lifetime of the challenge on its own and not rely on the timestamp of the signed challenge that was sent by the client.
+\end{itemize}
+
+
+\subsection{Attacker updates the signed hash, which is signed with client's private key.}
+\label{threat:update-signed-hash}
+Changing the signed hash would be equivalent to issuing a new signature, see ~\ref{threat:create-signed-hash}.
+
+
+
+
+
+
+\subsection{Attacker creates a signed container.}
+\label{threat:create-signed-container}
+This threat is equivalent to~\ref{threat:create-signed-hash} as the critical part of creating a container is signing the hash value. 
+
+
+\subsection{Attacker reads/uses/copies the contents of a signed container.}
+\label{threat:read-signed-container}
+This is not a threat as the signature container is not meant to provide the confidentiality of the signed data. In case confidentiality is required, it has to be provided by other means.
+
+
+
+
+
+
+
+\subsection{Attacker creates a new authentication challenge.}
+\label{threat:create-authchallenge}
+This is equivalent to trying to trick the user into entering a PIN code in order to authenticate to a different service provider. However, if such an attempt is made directly before the user is going to authenticate, the user might be willing to enter the PIN code the second time thinking that something went wrong with the first request. 
+
+Possible mitigations:
+\begin{itemize}
+\item The user is able to verify the origin of the challenge. However, this does not prevent a powerful MITM attack.
+
+\item In case the challenge is signed by the service provider, the client verifies that the signature on the challenge is connected with the public key, which was used to initiate the TLS session. In case the attacker signs the challenge on its own then the service provider will detect the attack during verification.
+\end{itemize}
+
+
+\subsection{Attacker reads/uses/copies the authentication challenge.}
+\label{threat:read-authchallenge}
+The server authenticates the client by sending a challenge, which has to be signed along with additional information (forming the authentication token) by the authentication private key. The resulting signed authentication token is then returned to the service provider.
+
+In case the attacker could read the challenge, he could sign it himself hoping that the server does not validate the identity of the signer. However, this attack is trivially mitigated if the server verifies also the identity of the signer. 
+
+It would also be possible to reuse the same challenge by getting the same client to authenticate to a service owned by the attacker. Such an attack would be detected in case the original service provider is using certificate validation based version of Web eID, which is described in Section~\ref{sec:cert_validation}. 
+
+The attacker could copy and store the challenge so that it could be later sent to be signed by the client.
+
+
+Possible mitigations:
+\begin{itemize}
+\item Server must validate both the signature and the information inside the signature.
+
+\item The signed challenge must be accepted only once by the service provider to initiate the session.
+
+\item The challenge must have a limited lifespan after which it expires, and afterwards the signed response does not initiate a new session.
+
+\item Timestamping the challenges and keeping track of their expiry must be done on the server side by using server time. Client side time must not be trusted.
+\end{itemize}
+
+
+\subsection{Attacker updates the authentication challenge.}
+\label{threat:update-authchallenge}
+In case the attacker can replace the authentic authentication challenge sent by one service provider with a challenge from the second service provider, the attacker might get access to the client's account, which is connected with the second service provider.
+
+Locations:
+\begin{itemize}
+\item A malicious or infected service provider could act as a man-in-the-middle by forwarding the challenge from a different entity.
+\item The challenge could be replaced while it is being transmitted over the communication channel in case the confidentiality and integrity of the communication channel can be attacked.
+\item The challenge could be replaced in the user's browser by a malicious browser extension.
+\item The challenge could be replaced by intercepting communication between the browser and the smart card reader.
+\item The challenge could be replaced by a malicious smart card reader.
+\end{itemize}
+
+Possible mitigations:
+\begin{itemize}
+\item Remote attacks are mitigated as the client has to sign both the origin and the fingerprint of the service provider's certificate, and return them to the service provider. Thus, a malicious service provider or a compromised communication channel can not successfully play the role of a man-in-the-middle attacker.
+
+\item The attack is possible in case user's device is compromised. It is unclear what level of access is needed for local interception of the challenge. This may depend on the used operating system and browser due to the differences in the interfaces. We give a recommendation in Section~\ref{rec:modeling-runtime-environment} to study such issues.
+\end{itemize}
+
+
+\subsection{Attacker deletes the authentication challenge.}
+\label{threat:delete-authchallenge}
+This is DoS as the user is prevented from using the corresponding service. This can be used to force the client to use a weaker authentication method (in case such methods are available).
+
+We assume that the communication channel is protected by TLS. Thus, the attacker can be located either in the servers of the service provider or in client's machine. Protecting the service provider is out of scope for this analysis. Protecting the communication in the local machine depends on the security of the used interfaces. This has to be investigated for each supported operating system as the interfaces differ. We give a recommendation in Section~\ref{rec:modeling-runtime-environment} to study such issues.
+
+
+
+
+\subsection{Attacker creates a new unsigned authentication token or its hash.}
+\label{threat:create-authtoken}
+The authentication token contains the challenge and information about the origin of the challenge to prevent MITM attacks. The attacker is unlikely to find a challenge from a different service provider with a colliding value in case the space for selecting the challenge is large enough and the challenge is randomly generated by using high quality randomness that is suitable for cryptographic operations. Thus, the attacker is in a situation that is similar to~\ref{threat:create-authchallenge}.
+
+In case the attacker is able to affect the way hash is generated, he is able to choose which token is being signed. This attack requires access to client's machine. 
+
+Mitigation regarding the guessing of the challenge:
+\begin{itemize}
+\item It is important that the source of randomness is suitable for cryptographic operations. Thus, the randomness must be generated either by using a certified hardware based random number generator or by a software based random number generator that is suitable for cryptographic operations. Operating systems have such software based random number generators, for example in UNIX-like systems either \texttt{getrandom(2)} or initialized \texttt{/dev/urandom} must be used. The source of randomness must also be available when it is needed (therefore blocking \texttt{/dev/random} must not be used in UNIX-like systems). 
+
+\item In case the server that generates the challenge is in a virtual machine and that machine is cloned, the state of the random number generator may end up the same. Thus, cloning the virtual machine that contains the server which generates the challenges must be avoided. If it is not possible, special care should be taken to make sure that randomness states in the cloned machines diverge before the next challenge is generated.
+\end{itemize}
+
+
+
+\subsection{Attacker reads/uses/copies the unsigned authentication token or its hash.}
+\label{threat:read-authtoken}
+The confidential information in the unsigned authentication token is the challenge. Thus, see~\ref{threat:read-authchallenge}. 
+
+
+\subsection{Attacker updates the unsigned authentication token or its hash.}
+\label{threat:update-authtoken}
+The attacker either modifies the authentication challenge (see~\ref{threat:create-authchallenge}, \ref{threat:update-authchallenge}) or the related information, which points to the origin of the challenge. When the origin or certificate fingerprint is modified in the token, the change will be detected later by the service provider who issued the challenge.
+
+In case the attacker is able to replace the hash of the token, he is able to choose which token is being signed. This attack requires access to client's machine. 
+
+\begin{itemize}
+\item The server must verify that the signed authentication token contains the correct origin and matching certificate fingerprint.
+\end{itemize}
+
+
+\subsection{Attacker deletes the unsigned authentication token or its hash.}
+\label{threat:delete-authtoken}
+This threat is equivalent to the one in~\ref{threat:delete-authchallenge}.
+
+
+\subsection{Attacker creates a signed authentication token.}
+\label{threat:create-authtoken-signed-hash}
+This is only possible when the attacker has access to the signing functionality on client's machine and to a valid authentication challenge. 
+
+To mitigate this threat, the attacker must be prevented from using the signing functionality and from changing the content that is sent to be signed (see~\ref{threat:update-authtoken} and~\ref{threat:update-authchallenge}).
+
+Possible mitigations:
+\begin{itemize}
+\item Use a smart card reader with a PIN-pad that only allows to enter the PIN-code from the PIN-pad.
+\item A partial mitigation is to allow notifications to be enabled, which would inform the card owner e.g., when a new signature is given. This could prevent further damage.
+\end{itemize}
+
+
+\subsection{Attacker reads/uses/copies the signed authentication token.}
+\label{threat:read-authtoken-signed-hash}
+The signed authentication token is used as a proof for the service provider to start the session. In case of a valid token the service provider responds with a session cookie (or equivalent). Thus, the attacker could use this value to hijack a session. The attacker could also wait and try to reuse the signed authentication token later.
+
+Locations:
+\begin{itemize}
+\item Service provider is not in the scope because when the attacker has compromised the service provider, the authentication token is not needed any longer.
+
+\item The communication channel is assumed to provide confidentiality due to the usage of TLS.
+
+\item A malicious browser extension could read the authentication token. It is unclear where else in the local machine this value could be accessed. This has to be studied for each supported operating system as the interfaces differ. We give a recommendation in Section~\ref{rec:modeling-runtime-environment} to study such issues.
+\end{itemize}
+
+Possible mitigations:
+\begin{itemize}
+\item The service provider must only accept the authentication token once to start a new session. Thus, the attacker can succeed only if he is first to forward the authentication token to the service provider. In this case the user is not able to start a session and gets an error message.
+
+\item The challenge must have a limited lifetime and therefore the signed token must also be bound to the same limited lifetime. The service provider must check that the challenge in the received authentication token has not expired.
+
+\item TLS with client certificate authentication allows the service provider to verify with each request if the client has access to the authentication private key. In case the attacker does not have access to the corresponding private key, session hijacking is not possible. However, TLS with client certificate authentication is not compatible with the new Web eID architecture.
+
+\item Token Binding uses the randomness of the TLS session, more specifically the exported keying material (EKM), to bind the session token to the TLS session, making it impossible to successfully reuse the same session token in a different TLS session. For a new TLS session the client would have to issue a new signature.
+\end{itemize}
+
+
+\subsection{Attacker updates a signed authentication token.}
+\label{threat:update-authtoken-signed-hash}
+This is only possible when the attacker has access to the signing functionality on client's machine. Thus, the threat is equivalent to~\ref{threat:create-authtoken-signed-hash}.
+
+
+\subsection{Attacker deletes a signed authentication token.}
+\label{threat:delete-authtoken-signed-hash}
+This is DoS, the threat is equivalent to the one in~\ref{threat:delete-authtoken}.
+
+
+
+
+\subsection{Attacker reads/uses/copies the OCSP response.}
+\label{threat:read-OCSP}
+The OCSP response is not confidential. However, by doing OCSP requests the client gives away its privacy as the OCSP service provider can see the requests. 
+
+Possible mitigations:
+\begin{itemize}
+\item To protect the privacy of clients the service provider should use OCSP stapling\footnote{\url{https://en.wikipedia.org/wiki/OCSP_stapling}}.
+\end{itemize}
+
+
+
+\subsection{Attacker creates a session cookie.}
+\label{threat:create-cookie}
+In theory, the attacker could guess the value of a valid session cookie, but in practice the probability is negligible in case the server side uses proper randomness for the cookie. We assume that the session cookie is generated by using high quality randomness. 
+
+We do not consider the cases of a compromised service provider and compromised client device as in these cases the attacker already has access to either the service or to the valid session. 
+
+However, the attacker could create a session cookie and plant it by using a session fixation vulnerability. This could be implemented remotely in case there is a cross-site scripting (XSS) vulnerability.
+
+Possible mitigations:
+\begin{itemize}
+\item Guessing the value of the session cookie is mitigated by using a sufficiently long random value for the session cookie. 
+\item To prevent session fixation, a new session cookie must to be generated on the server side after the user has completed authentication.
+\end{itemize}
+
+
+\subsection{Attacker reads/uses/copies a session cookie.}
+\label{threat:read-cookie}
+By reading the value of a valid session cookie (or session token), the attacker can hijack the corresponding session. The leak could happen in the client device, during transmission or in the server of the service provider.
+
+The proposed architecture allows to detect MITM during authentication. However, the attacker could wait until the client has successfully authenticated and initiate the MITM attack once a new TLS session is started. This would allow the attacker to access the session cookie / token and thereby hijack the session. 
+
+Protecting the service provider's server is not in the scope of this project. However, there are existing technologies that prevent the copied session cookie from being successfully reused. 
+
+Possible mitigations:
+\begin{itemize}
+\item The confidentiality of the session cookie is protected by TLS during communication.
+
+\item If HttpOnly is set on the cookie, client side JavaScript is restricted from accessing the corresponding cookie. HttpOnly is used as one of the measures to prevent XSS.
+
+\item If Secure flag is set on the cookie, the cookie is not transmitted in cleartext through an unencrypted communication channel (HTTP).
+
+\item If SameSite attribute is present, restrictions are set on sending the corresponding cookie to a third party website. This functionality tries to prevent cross-site request forgery attacks. 
+
+\item Cookie prefixes help to protect the cookie from non-secure subdomains\footnote{\url{https://tools.ietf.org/html/draft-ietf-httpbis-cookie-prefixes-00}}.
+
+\item TLS with client certificate authentication allows the service provider to verify with each request if the client has access to the authentication private key. In case the attacker does not have access to the corresponding private key, MITM and session hijacking is not possible. However, TLS with client certificate authentication is not compatible with the new Web eID architecture.
+
+\item Token Binding uses the randomness of the TLS session, more specifically the exported keying material (EKM), to connect the session token to the TLS session, making it impossible to successfully reuse the same session token in a different TLS session (in case the attacker does not have access to the signing key, which is used to bind the TLS session).
+\end{itemize}
+
+
+\subsection{Attacker updates a session cookie.}
+\label{threat:update-cookie}
+An attacker is not able to issue a valid session cookie on its own. However, session fixation could allow the attacker to set his own cookie, see~\ref{threat:create-cookie}.
+
+
+\subsection{Attacker deletes a session cookie.}
+\label{threat:delete-cookie}
+If the session cookie is removed from client's browser, the client may think that the session has ended. It is essentially a denial of service attack. However, it may give the attacker a chance to continue using the corresponding session cookie without the user being aware of an existing session. See~\ref{threat:read-cookie} for methods on how to prevent the hijacking of a session cookie. This attack requires either direct or indirect access to the client's browser. 
+
+
+
+
+
+
+
+
+
+\newpage
+\section{Threats that are out of scope}
+\label{sec:out_of_scope_threats}
+The scope of the analysis is described in Section~\ref{sec:scope} and is focused on the interaction between the browser, native Web eID application and the service provider. It was decided that the analysis would focus on the components which can be affected by the architecture of Web eID. However, there are also external components and third parties which can not be controlled by the Web eID architecture, but which can affect its security. Thus, we also list the threats originating from the components that are out of scope of this analysis. This is done in order to see the overall threat landscape and to be able to react to the threats from external components. Therefore, these components must to be regularly reviewed to check whether additional mitigation measures are necessary. 
+
+\subsection{Attacker manages to create a valid authentication (or signing) private key for the client. Location does not matter here.\newline [Out of scope]}\label{threat:create-private-key}
+We assume that the key length is sufficient to prevent brute force attacks. If an attacker is able to create a valid private key, he has broken the underlying cryptosystem or the private key was generated in a predictable manner. We assume in this analysis that breaking the cryptosystem is not possible. We also assume that the private key is generated according to the requirements set for the corresponding cryptosystem by using randomness source that is designed to be suitable for cryptographic applications. 
+
+
+\subsection{Attacker manages to read/use/copy the client's authentication (or signing) private key. Location does not matter here.\newline [Out of scope]}\label{threat:read-private-key}
+Attacker has broken the security of ID-card and either extracted the private key or is able to use the private key without having access to the PIN codes and PUK code. We assume in this analysis that this is not possible. We assume that the private keys of the ID-card never leave the card and are generated inside the chip using cryptographically secure randomness.
+
+Possible mitigations:
+\begin{itemize}
+\item The ID-card chip is designed to prevent the extraction of private keys.
+\item The ID-card firmware protects access to the private key operations with a PIN code. There is a limited number of attempts to try the PIN / PUK code before the card gets locked. 
+\item The chip contains countermeasures against physical tampering.
+\end{itemize}
+
+
+\subsection{Attacker manages to update client's authentication (or signing) private key. Location does not matter here.\newline [Out of scope]}\label{threat:update-private-key}
+This is either ``create'' (see~\ref{threat:create-private-key}) or ``delete'' (see~\ref{threat:delete-private-key}).
+
+
+\subsection{Attacker manages to delete client's authentication (or signing) private key. Location does not matter here.\newline [Out of scope]}\label{threat:delete-private-key}
+Attacker renders the private key inaccessible, e.g. by regenerating the key pair. This requires either breaking the card security or knowing the Management key\footnote{\url{https://installer.id.ee/media/id2019/TD-ID1-Chip-App.pdf}}. The first is assumed to be not possible, the second (protecting the Management key) is not in scope. It is also possible to lock the card by entering wrong PIN or PUK codes. 
+
+Possible mitigations:
+\begin{itemize}
+\item The client can go to a service point of a police office to unlock the PIN codes.
+\end{itemize}
+
+
+
+
+\subsection{Attacker creates (guesses) client's PIN code(s) in client's device.\newline [Out of scope]}
+Attacker has guessed client's PIN code(s). Attacker is able to authenticate or issue signatures at will when ID-card is in the reader.
+
+Possible mitigations:
+\begin{itemize}
+	\item Mitigation for brute-force attacks is already implemented: limited number of retries.
+	\item Mitigation against misuse: let the client know about key usages over a secondary channel.
+	\item Mitigation against guessing: use PIN-pad based readers, which only accept PIN-codes from the PIN-pads. Thus, malware would not be able to send a PIN code to the ID-card chip.
+\end{itemize}
+
+
+\subsection{Attacker reads (learns)/uses/copies client's PIN code(s) in client's device.\newline [Out of scope]}
+\label{threat:read-pin}
+Attacker obtains client's PIN code(s). The PIN may leak in multiple ways, e.g., it could be read from application memory, intercepted by a keylogger malware, intercepted from the window events related with the PIN dialog. 
+
+Attacker who has access to PIN codes is able to authenticate or issue signatures at will when ID-card is in the reader.
+
+Possible mitigations:
+\begin{itemize}
+	\item Mitigation against keyloggers: only enter PIN codes from card readers that have pin firewalled PIN-pads.
+	\item Mitigation against misuse: let client know about key usages over a secondary channel.
+\end{itemize}
+
+
+\subsection{Attacker updates (changes) client's PIN code(s) in client's device.\newline [Out of scope]}
+Attacker has changed the PIN code(s), invalidating access to the card owner (see~\ref{threat:delete-pin}) and at the same time granting itself access to authentication or signing key whenever the card is in the regular card reader that does not have a PIN-pad.
+
+Attacker needs either the PUK code or the Management key to change PIN1 or PIN2. Protecting the Management key is not in the scope of this project.
+
+Possible mitigations:
+\begin{itemize}
+	\item Protection against remote attackers (malware): only enter PIN codes from card readers that have PIN-pads. The card reader should only allow the PIN to be entered from the PIN-pad (i.e., they should have a PIN firewall).
+\end{itemize}
+
+
+\subsection{Attacker deletes (locks) client's PIN code in client's device.\newline [Out of scope]}\label{threat:delete-pin}
+Attacker locks the PIN code(s), invalidating access to either the authentication key or signing key. This is DoS. User can restore access with PUK code, but we can assume the attacker can also lock this.
+
+In case the user enters the PUK code, the attacker might  intercept it and use it to replace the PIN codes.
+
+Possible mitigations:
+\begin{itemize}
+\item Only use card readers which only accept PIN-codes from the PIN-pads.
+\item Client can go to a service point of a police office to unlock the PIN codes.
+\end{itemize}
+
+
+
+
+\subsection{Attacker creates a valid certificate (signed by a CA) for a selected public key.\newline [Out of scope]}
+\label{threat:create-cert}
+This is possible in case the attacker has access to CA's signing key. The attacker should not be able to generate the signing key unless the cryptosystem gets broken or the key was generated in a predictable manner. As an alternative, the attacker would have to get access to the signing key. This threat is out of scope for this analysis and has to be mitigated by the CA or by the mechanisms, which are used to audit the CA.
+
+It is also possible that the attacker is able to impersonate an entity who wants a certificate to be issued. Mitigating social engineering attacks is out of the scope for this analysis. 
+
+Possible mitigation:
+\begin{itemize}
+ \item Certificate Transparency allows to monitor certificates that are legitimately issued by a CA. Thereby, the service provider can use  information from CT logs to start revocation of a mistakenly issued certificate. 
+ \end{itemize} 
+
+
+
+\subsection{Attacker updates a valid certificate (signed by a CA) for a selected public key.\newline [Out of scope]}
+This is either ``create'' (see~\ref{threat:create-cert}) or ``delete'' in case the certificate gets revoked (see~\ref{threat:delete-cert}).
+
+
+\subsection{Attacker revokes or suspends a certificate (signed by a CA) for a selected public key.\newline [Out of scope]}
+\label{threat:delete-cert}
+In case a TLS certificate gets revoked and the information reaches the browsers, they will start to warn users and prevent them from automatically proceeding to the corresponding website.
+
+In case the ID-card signature certificate gets revoked, it will not possible to use that certificate any longer for issuing legally binding signatures. However, if these certificates get suspended, they can be reactivated.
+
+Malicious revoking or suspension of a certificate is out of scope for this analysis and has to be mitigated by the CA or by the mechanisms, which are used to audit the CA. 
+
+
+
+\subsection{Attacker creates a long term private key for the service provider.\newline [Out of scope]}
+\label{threat:create-privkey-server}
+The reasoning is the same as in~\ref{threat:create-private-key}. 
+
+
+\subsection{Attacker reads/uses/copies service provider's long term private key.\newline [Out of scope]}
+\label{threat:read-privkey-server}
+Access to service provider's long term private key may give the attacker the option to decrypt and read the TLS traffic between the corresponding service provider and its clients (only when ephemeral keys are not used to achieve perfect forward secrecy). Thus, the attacker could access the values of authentication challenges and session cookies. Therefore, it might be possible to hijack client's sessions.
+
+The attacker could set up a fake service, which uses the valid certificate of the service provider. DNS spoofing is required for this attack to succeed.
+
+Protecting the private key of the service provider is not in the scope of this analysis.
+
+Possible mitigations to session hijacking:
+\begin{itemize}
+\item Token Binding prevents session hijacking by binding the session to the TLS session randomness as described in Section~\ref{sec:token_binding}.
+\end{itemize}
+
+
+\subsection{Attacker updates service provider's long term private key.\newline [Out of scope]}
+\label{threat:update-privkey-server}
+This is either ``create'' (see~\ref{threat:create-privkey-server}) or ``delete'' (see~\ref{threat:delete-privkey-server}).
+
+
+\subsection{Attacker deletes service provider's long term private key.\newline [Out of scope]}
+\label{threat:delete-privkey-server}
+This requires access to the service provider's servers. Protecting the private key of the service provider is not in the scope of this analysis.
+
+
+
+
+
+\subsection{Attacker creates a signing key for the eID CA.\newline [Out of scope]}
+\label{threat:new-ca-key}
+This threat is out of scope for this analysis and has to be mitigated by the CA or by the mechanisms, which are used to audit the CA. The threat of guessing client's private key is similar and it is described in~\ref{threat:create-private-key}.
+
+
+\subsection{Attacker reads/uses/copies eID CA's signing key.\newline [Out of scope]}
+By having access to the signing key of the eID CA the attacker could issue new certificates for chosen key pairs. 
+
+This might allow the attacker to create a duplicate digital identity, which might be used for authentication or issuing signatures in the name of the corresponding user.
+
+Protecting the CA's signing key is out of scope for this analysis and has to be mitigated by the CA or by the mechanisms, which are used to audit the CA.
+
+Possible mitigations:
+\begin{itemize}
+\item The service provider must check during authentication that the OCSP response for a client certificate is good. Thus, just issuing a certificate is not sufficient to trick the service provider. Therefore, the service provider must cancel the authentication process in case good OCSP response is missing or when the OCSP service can not be reached.
+
+\item A legally binding signature must contain the OCSP response stating that the signing certificate was valid during the time the signature was issued. Thus, for a successful attack the attacker would also have to add the new certificate to list of certificates that the OCSP service manages. 
+\end{itemize}
+
+
+\subsection{Attacker updates eID CA's signing key.\newline [Out of scope]}
+See~\ref{threat:new-ca-key}.
+
+\subsection{Attacker deletes eID CA's signing key.\newline [Out of scope]}
+This threat is out of scope for this analysis and has to be mitigated by the CA.
+
+
+
+
+
+\subsection{Attacker creates a signing key for the CA issuing TLS certificates.\newline [Out of scope]}
+\label{threat:new-tls-ca-key}
+This threat is out of scope for this analysis and has to be mitigated by the CA or by the mechanisms, which are used to audit the CA. See~\ref{threat:new-ca-key}.
+
+
+\subsection{Attacker reads/uses/copies the signing key of the CA issuing TLS certificates.\newline [Out of scope]}
+By having access to CA's signing key the attacker could issue fraudulent certificates for a chosen service provider that third parties like browsers can't distinguish from the legitimate certificates.
+
+Protecting the CA's signing key is out of scope for this analysis and has to be mitigated by the CA or by the mechanisms, which are used to audit the CA.
+
+However, a fraudulently issued certificate could be used for a man-in-the-middle (MITM) attack as it would allow the attacker to impersonate the corresponding service provider.
+
+Possible mitigations:
+\begin{itemize}
+\item Fraudulently issued certificates could be detected by Certificate Transparency\footnote{\url{https://www.certificate-transparency.org}}.
+
+\item The MITM attack could be detected if TLS client certificate authentication is used. However, TLS with client certificate authentication is not compatible with the new Web eID architecture.
+
+\item The MITM attack could be detected in case Token Binding is used.
+
+\item The MITM attack could be detected by the service provider if the client signs the origin + certificate fingerprint of the service provider. In that case the real service provider could detect MITM in case certificate fingerprint does not match. This approach needs additional configuration when proxies are used together with TLS as in that case the proxy has to forward information about it's certificate to the back-end server.
+
+\item The MITM attack could be detected by either the client or the service provider if the service provider would sign the challenge with the private key that is associated with the certificate for the corresponding domain. In this case the client would have to check that the signature verifies with the public key of the party the client is communicating with over TLS. In case the attacker would sign the challenge on its own, the service provider would later detect that the initial signature on the challenge was issued by a third party. Currently only Firefox allows browser extensions to access the public key of the server with whom the TLS session is established\footnote{\url{https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/webRequest/SecurityInfo}}
+\end{itemize}
+
+
+\subsection{Attacker updates the signing key of the CA issuing TLS certificates.\newline [Out of scope]}
+See~\ref{threat:new-tls-ca-key}.
+
+\subsection{Attacker deletes the signing key of the CA issuing TLS certificates.\newline [Out of scope]}
+This threat is out of scope for this analysis and has to be mitigated by the CA.
+
+
+\subsection{Attacker deletes data, which is sent to be signed.\newline [Out of scope]}
+\label{threat:delete-data-for-signing}
+This is DoS as it prevents the client from using the ID-card to issue signatures. Mitigation of this threat is not in the scope of this analysis.
+
+\subsection{Attacker deletes the hash, which is sent to be signed.\newline [Out of scope]}
+\label{threat:delete-hash-for-signing}
+This is DoS as it prevents the client from using the ID-card to issue signatures. Mitigation of this threat is not in the scope of this analysis.
+
+\subsection{Attacker deletes the signed hash, which is signed with client's private key.\newline [Out of scope]}
+\label{threat:delete-signed-hash}
+This is DoS as it prevents the client from using the ID-card to issue signatures. Mitigation of this threat is not in the scope of this analysis.
+
+
+\subsection{Attacker updates the contents of a signed container.\newline [Out of scope]}
+\label{threat:update-signed-container}
+In case the attacker is able to break the second preimage resistance of the cryptographic hash function, which was used to issue the signature, the attacker might replace the document in the signed container so that the signature would stay valid.
+
+Possible mitigations:
+\begin{itemize}
+\item A strong cryptographic hash function must be used for issuing signatures.
+
+\item The design and implementation of the system should allow to replace the used cryptographic hash function in case vulnerabilities are found. This does not protect the previously issued signatures, but would allow to quickly fix the issue by replacing the hash function.
+\end{itemize}
+
+\subsection{Attacker deletes the signed container.\newline [Out of scope]}
+\label{threat:delete-signed-container}
+By deleting the signed container the attacker may make legal disputes more difficult. Protecting the availability of data is the responsibility of the parties who exchange signatures, and this is not in the scope of this analysis. 
+
+
+
+\subsection{Attacker creates the OCSP response.\newline [Out of scope]}
+\label{threat:create-OCSP}
+This could allow the attacker to use the identity of the victim while the corresponding certificate has been suspended. This threat is out of scope for this analysis and has to be mitigated by the CA or by the mechanisms used to audit the CA.
+
+
+\subsection{Attacker updates the OCSP response.\newline [Out of scope]}
+\label{threat:update-OCSP}
+See~\ref{threat:create-OCSP}.
+
+\subsection{Attacker deletes the OCSP response.\newline [Out of scope]}
+\label{threat:delete-OCSP}
+This may happen when the attacker takes down the OCSP service or prevents the OCSP responses from reaching the requesting party.
+
+Such an attack could halt the usage of authentication services as the service provider is not able to verify whether the client certificate is valid.
+
+In case the attacker is able to compromise the TLS private key of the service provider, info about revoking may reach the browsers with a delay. Thus, the client may continue to accept the certificate that is connected to the compromised private key. Therefore, the client is not able to verify the authenticity of the service provider and may instead communicate with the attacker's server.
+
+
+Possible mitigations:
+\begin{itemize}
+\item OCSP stapling should be set to be mandatory (OCSP Must-Staple) in the certificate of the service provider. In this case the attacker who has compromised the private key of the service provider must send the OCSP response to the client or the connection will be terminated by the browser.
+
+\item The server side architecture should allow to temporarily use the authentication functionality without the OCSP service or replace it with a similar functionality. This might be required when some business critical institutions do not have alternative authentication methods and need to continue using the ID-card based authentication. This may happen when the OCSP service is under a cyber attack or the servers are physically destroyed.
+\end{itemize}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+

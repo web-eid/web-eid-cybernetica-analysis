@@ -1,0 +1,74 @@
+\chapter{Technologies}
+
+This chapter takes a look at the technologies used, criteria of choosing them and how they help to mitigate the threats identified in this report.
+
+\section{Arguments for choosing OpenID Connect ID Token format and custom protocol}
+
+Web eID has chosen OpenID X509 ID Token and a custom protocol as means of communicating the authentication result. The obvious alternative to the chosen protocol would be full WebAuthn support, but there are strong arguments against it:
+
+\begin{enumerate}
+    \item WebAuthn is overly complicated and not practical to implement for small e-service providers. Support by different web application frameworks is not (yet) sufficient.
+    \item Specification is long (167 pages) and requires deep understanding of the technology, yet its first mentioned audience is "Relying Party web application developers". This does not sound viable, as Relying Party web application developers cannot be expected to be experts of such protocols, except in large organisations.
+    \item It uses public key as end user identifier (not identifiers bound via PKI certificates) and is built around the "key pair per service" model. Using the same ID card key for all services may have strange implications (requires further analysis).
+    \item The previous point also means that replacing an ID-card (and thus the keys) may have strange implications and may cause user lock-outs.
+    \item It requires device attestation. Even though this can be skipped, device attestation does not conceptually apply to the eID ecosystem.
+\end{enumerate}
+
+Based on that, OpenID X509 ID Token is the superior option:
+
+\begin{enumerate}
+    \item It is based on a standard container format, offering digital signatures, symmetric integrity protection and authenticated encryption.
+    \item It offers hypothetical future compatibility with OpenID Connect, or at least offers a cheaper migration path, as that technology is already known for e-service developers.
+\end{enumerate}
+
+
+\section{Token Binding}
+\label{sec:token_binding}
+Token Binding is a proposed extension for TLS using a key pair also on client's side of the connection\footnote{\url{https://tools.ietf.org/html/rfc8471}}, thereby being similar to TLS-CCA. Token Binding prevents strong man-in-the-middle attacks in cases where an attacker has access to a valid certificate for the target domain. In addition, it prevents session tokens or session cookies from being reused in another TLS session, thereby effectively preventing session hijacking attacks. This is achieved by cryptographically binding the session identifier to the randomness used in the corresponding TLS session. More specifically, the exported keying material (EKM)\footnote{\url{https://tools.ietf.org/html/rfc5705}} from the TLS session is signed by client's Token Binding key. 
+
+When Token Binding is used together with TLS 1.2 (or older versions), then also the Extended Master Secret extension (RFC 7627)\footnote{\url{https://tools.ietf.org/html/rfc7627}} and TLS Renegotiation Indication (RFC 5746)\footnote{\url{https://tools.ietf.org/html/rfc5746}} extension must be used\footnote{\url{https://tools.ietf.org/html/rfc8471\#section-4.2}}.
+
+One downside of Token Binding is that it would make it difficult to debug and monitor connections as HTTPS interception would break. Other concerns like using Token Binding for DRM can be found from Google's discussion boards\footnote{\url{https://groups.google.com/a/chromium.org/forum/\#!msg/blink-dev/OkdLUyYmY1E/w2ESAeshBgAJ}}\footnote{\url{https://groups.google.com/a/chromium.org/forum/\#!msg/blink-dev/r4zE8RKB6l4/0VNjdZRQAAAJ}}. Such concerns resulted in Google Chrome dropping the support for Token Binding in 2018. From the mainstream browsers it is only supported by Edge\footnote{\url{https://docs.microsoft.com/en-us/windows-server/security/token-binding/introducing-token-binding}}. However, the work on the Token Binding standard is continuing.
+
+It is difficult to build a public service on top of Token Binding until it is not supported by mainstream browsers. Thus, alternative technologies should be used to provide similar protective measures. For example, Certificate Transparency is a technology that allows to detect powerful man-in-the-middle attacks.
+
+
+\section{Certificate Transparency}
+\label{sec:certificate_transparency}
+Certificate Transparency (CT)\footnote{\url{https://tools.ietf.org/html/rfc6962}} is a protocol that is designed to limit the amount of damage from mistakenly or maliciously issued certificates. It works by creating public append-only logs of CA issued certificates, which allows to publicly monitor and audit new certificates. Thereby, the domain owner and the CA can monitor the logs and detect if a new (malicious) certificate is issued for a given domain.
+
+Google Chrome started to enforce CT for new (public) certificates that were issued since April 30th  2018.\footnote{\url{https://groups.google.com/a/chromium.org/forum/\#!msg/ct-policy/wHILiYf31DE/iMFmpMEkAQAJ}} Certificates that were issued before that date got an exception and can still be used. However, in case a new certificate is issued without the support for CT, visiting the corresponding web site with Google Chrome results in a full page error with the code \texttt{net::ERR\_CERTIFICATE\_TRANSPARENCY\_REQUIRED}. Thus, in order for a website to be compatible with Google Chrome it has to comply with CT. As Google Chrome has the largest market share\footnote{\url{https://gs.statcounter.com/browser-market-share}}, it is inevitable that CT will be supported by almost all websites, which use TLS. In addition to Google Chrome, Safari also started to enforce CT for the certificates issued since October 15th  2018.\footnote{\url{https://support.apple.com/en-us/HT205280}} In 2019, a study was performed to measure the adaption and error rate of CT~\cite{DBLP:conf/sp/StarkSMOMFMT19}. Telemetry from Google Chrome was used in that study and it showed that in the beginning of February 2018, 71.1\% of requests for which CT would apply were CT-compliant. The study reported that by September 2018, CT-compliance was required for 42.6\% of connections and out of these 99.7\% of HTTPS requests were CT-compliant\footnote{\url{https://www.ieee-security.org/TC/SP2019/SP19-Slides-pdfs/Emily_Stark_-_3-Emily_Stark-Does_Certificate_Transparency_Break_the_Web-_Measuring_Adoption_and_Error_Rate_(1).pdf}}.
+
+Service providers can force supporting browsers to strictly follow CT by using \texttt{Expect-CT} header\footnote {\url{https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Expect-CT}}. For example, Google Chrome can be forced to follow CT also for certificates that were issued before April 30th 2018 by using \texttt{Expect-CT} header. That way it is possible to prevent attacks with certificates that were issued before April 30th 2018.
+
+One open issue with CT is its support by other browsers. Until all major browsers will start to enforce CT, it can not prevent targeted attacks. The other issue is that the service providers and the CA-s have to be active to monitor and detect maliciously issued certificates so that they could be revoked in time.
+
+One way how CT can be implemented is by using OCSP stapling (see Section~\ref{sec:ocsp_stapling}). However, the main benefit of using OCSP stapling is to make sure that information about certificate revocation is sent to the client's browser.
+
+
+\section{OCSP stapling}
+\label{sec:ocsp_stapling}
+OCSP is used to check whether a given certificate is valid at a given time point. However, there are multiple problems with client side OCSP queries, one of them being the leakage of private information regarding the web sites the client is using.
+
+OCSP queries are relevant in the new architecture in two ways. First one is explicitly illustrated in Figure~\ref{fig:scope} where the service provider checks if the client certificate is valid. Second, the client can also check whether the service provider's certificate is valid while initiating the TLS connection (however, some browsers skip the OCSP queries).
+
+The validity check for the service provider's certificate is required to avoid man-in-the-middle attacks in case service provider's private key has leaked. However, currently browsers use soft fail in case OCSP service is briefly unavailable or the query is blocked. In these cases browsers proceed with the TLS connection, although OCSP response is missing. Therefore, by performing client side OCSP queries, the client can not get the guarantee that the certificate of the web site is valid. In addition, client side OCSP requests violate privacy of the user as the OCSP provider will find out when and which web sites the corresponding client visits.
+
+The solution to both of these issues is to use OCSP stapling\footnote{\url{https://tools.ietf.org/html/draft-hallambaker-tlsfeature-05}}. This allows the service providers to deliver the OCSP response to the client together with the TLS certificate. To prevent downgrade attacks, this functionality must be enforced by setting OCSP Must-Staple flag in the certificate. This functionality is independent of the Web eID architecture and has to be separately configured by the service provider. Although OCSP stapling may seem to be out of scope regarding the new architecture, it is actually relevant to protect the end users against man-in-the-middle attacks.
+
+Just relying on OCSP stapling and Certificate Transparency is not sufficient to prevent man-in-the-middle attacks as they are not yet universally supported. Thus, Web eID architecture contains its own mitigation measures to prevent man-in-the-middle attacks as described in Section~\ref{sec:cert_validation}. However, these measures do not fully eliminate the threat from man-in-the-middle attacks as client's session can span multiple TLS sessions as described in Section~\ref{sec:tls_resumption}.
+
+
+\section{TLS session resumption}
+\label{sec:tls_resumption}
+The proposed Web eID browser extension architecture allows to use multiple TLS connections in the same authenticated session. For example in Section~\ref{sec:cert_validation} it is described that during the authentication phase two different TLS connections are used to make queries to the service provider. A new TLS session could also be initiated when the client temporarily loses Internet connection, however, this does not invalidate the authenticated session.
+
+Therefore, MITM protection should be provided not only for the initial authentication query, but also for negotiating a new TLS session. This is a non-trivial functionality, which is not implemented in the first version of Web eID. The reasoning for that is given in Section~\ref{sec:mitm_risks_mitigations}.
+
+One possible solution to this problem is to rely on TLS session resumption and force re-authentication when resumption is rejected. Whether this approach could be applied in practice depends on the server side architecture, i.e., whether the information about TLS session resumption is available to the web service.
+
+In the following we consider only TLS 1.2 and TLS 1.3 as mainstream browsers will end the support for TLS 1.0 and TLS 1.1 for regular users in the beginning of 2020.\footnote{\url{https://blog.mozilla.org/security/2018/10/15/removing-old-versions-of-tls/}}\footnote{\url{https://blogs.windows.com/msedgedev/2018/10/15/modernizing-tls-edge-ie11/}}\footnote{\url{https://webkit.org/blog/8462/deprecation-of-legacy-tls-1-0-and-1-1-versions/}}
+
+TLS resumption in TLS 1.2 is provided either by SESSION ID (RFC 5246)\footnote{\url{https://tools.ietf.org/html/rfc5246\#appendix-F.1.4}} or by SESSION tickets (RFC 5077)\footnote{\url{https://tools.ietf.org/html/rfc5077}}. TLS 1.3 replaces these with resumption based on pre-shared keys (RFC 8446)\footnote{\url{https://tools.ietf.org/html/rfc8446\#page-15}}.
+
+However, in order to prevent MITM during TLS resumption, the extended master secret extension (RFC 7627\footnote{\url{https://tools.ietf.org/html/rfc7627}}) must be used. This extension ties the master secret to the hash of the messages sent during the handshake. Thus, it prevents MITM that would negotiate two TLS sessions with the same master secret.

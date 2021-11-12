@@ -1,0 +1,35 @@
+\chapter{More topics for discussion}
+
+\section{Server-side security}
+During the process of writing this report, it remained an open question to which extent can we assume the security of the service provider's side, and which residual risks would it be possible to mitigate within the Web eID framework. On the other hand, it also remained unclear what is the readiness of an average service provider to implement some extra security measures. Both of these questions require more detailed analysis in the future.
+
+\section{End user device security}
+A similarly important open question concerns the security level of end user devices. There are many possible combinations of operating system versions, browsers, other software and extensions installed on these devices, etc. Some of these combinations are probably more vulnerable to malicious attacks than others, but classifying them all remains far outside of the current report. Nevertheless, in order to correctly assess the security level of Web eID, these aspects need to be studied in detail. 
+
+See also section \ref{rec:modeling-runtime-environment}.
+
+
+\section{Insecure wireless input devices}
+
+It is a well-known problem that popular non-Bluetooth wireless input devices (like many Logitech keyboards) allow eavesdropping and injection of input sequences, most importantly keyboard strokes. Such devices protect their radio communication by obfuscation only.
+
+\section{WebUSB vulnerabilities}
+
+There is an initiative to open up certain USB devices to direct access from JavaScript. Albeit smart card USB devices are currently barred from such usage, there have been vulnerabilities and when the protocol gets adopted beyond its current experimental status in Google Chrome, there will likely be more. See \url{https://wicg.github.io/webusb/} and \url{https://www.yubico.com/support/security-advisories/ysa-2018-02/}.
+
+\section{Modelling the runtime environment}
+\label{rec:modeling-runtime-environment}
+
+Our team of researchers and developers has thoroughly investigated the current technical proposal from the point of view of its runtime deployment structure. Unfortunately, the details known at the time of writing this are not sufficient for immediate determination of the solutions' security posture, i.e. how well does the solution protect itself against local adversary. One of the most important open questions is how easy it is for an attacker who has obtained only end user's (i.e., non-administrative) privileges on the computer to attack the user in various ways.
+
+To have clarity in this issue, the following documentation should be prepared in a later part of development process:
+
+\begin{itemize}
+    \item Assumptions on end user behaviour (e.g. no administrative privileges for everyday work).
+    \item Installation security (e.g. administrative privileges required for installation for Web eID solution in order to reduce code replacement vectors).
+    \item Complete list of runtime security contexts (e.g. end user space v.s. service user space v.s. kernel space code, etc) and their interactions, including caller authentication/identification.
+    \item List of measures taken to combat injection/replacement of dynamically loaded libraries.
+    \item List of measures taken to combat UI hijacking (i.e. PIN entry dialogues).
+\end{itemize}
+
+The list should be completed at least for Microsoft Windows as the most widespread consumer OS, thus being the most lucrative target for attacking.

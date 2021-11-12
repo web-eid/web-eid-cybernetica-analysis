@@ -1,0 +1,113 @@
+\chapter{Compatibility with TLS Client Certificate Authentication}
+\label{chapter:TLS-CCA}
+TLS Client Certificate Authentication (CCA) provides mutual authentication and thereby gives some additional security guarantees compared to one-way TLS, where only the server is authenticated. Below follows a list of some of the relevant properties and security features that may be offered by TLS-CCA:
+
+\begin{itemize}
+\item In the case of mutual authentication, the client signs all previous handshake messages that were exchanged during TLS session negotiation. The signed result is delivered to the server in the \texttt{CertificateVerify} message. Thus, the signature covers, among other things, the randomness selected by the server, randomness selected by the client, the server's certificate and the encrypted pre-master secret that the client chose\footnote{\url{https://tools.ietf.org/html/rfc5246}}.
+
+	\begin{itemize}
+	\item Client can not be successfully manipulated by a man-in-the-middle attack even when the middleman has obtained a fraudulent certificate for a service provider as the server's certificate and pre-master key are signed by the client.
+
+	\item It would still be possible for the middleman to successfully interact with the client, however, in this case the messages could not be relayed to the real server.
+	\end{itemize}
+
+\item TLS-CCA allows to bind the whole session to client's certificate if TLS-CCA is forced also after the login phase. This requires the service provider to request authentication for each request. However, this forces keeping the authentication security context activated on the ID-card in Open eID architecture after initial PIN1 entry, which poses a security threat of its own (otherwise the user would be required to enter PIN1 for every new HTTPS request, including requests for page assets like images and scripts, which would not be feasible).
+
+	\begin{itemize}
+	\item It gives protection against session hijacking. E.g., phishing or using XSS to steal a session cookie becomes irrelevant as a third party can not use the cookie.
+	\end{itemize}
+\end{itemize}
+
+
+\section{Comparison of TLS-CCA with other common authentication architectures}
+Many authentication systems are using signed tokens. However, in case the token is not bound to the TLS session, it is not possible to prevent an attacker from using a leaked session identifier. In such systems, session hijacking can not be prevented once the session identifier leaks. TLS-CCA-based Open eID is an exceptional case which, when configured correctly, can prevent session hijacking even when a valid session identifier leaks. However, the Web eID architecture along with other commonly used authentication systems like OpenID Connect, Mobile-ID, Smart-ID and WebAuthn (without Token Binding) is not able to prevent the session token from being reused in a different machine in case the session identifier leaks. Therefore, the threat of session hijacking must be mitigated by taking other measures against session identifier leakage.
+
+To prevent MITM attacks, the other communication party has to be authenticated. TLS-CCA is based on mutual authentication and, when configured correctly, prevents MITM attacks. In case of Web eID, the service provider can decide how well the authentication phase is protected against MITM attacks. Based on that decision either origin validation or certificate validation can be applied, which are described in Sections~\ref{sec:origin_validation} and \ref{sec:cert_validation}. However, the MITM protection only applies to the authentication phase. The following TLS sessions which reuse the same session identifier are not protected against MITM attacks. The same observation holds true for other authentication systems which do not re-authenticate new TLS sessions after the initial client authentication. Still, neither the TLS-CCA based Open eID architecture nor the Web eID architecture can stop an attacker who has obtained a proper domain certificate from successfully interacting with the client. However, Certificate Transparency can mitigate such attacks, along with most MITM attacks against TLS regardless of the used architecture.
+
+Client's private key is usually protected with a second authentication factor which unlocks the access to it. In the case of Open eID, Web eID, Mobile-ID and Smart-ID, access to the private key operations is restricted by requiring a PIN code. However, there is no straightforward mechanism to prevent the PIN code from being read in case malware has infected the corresponding device. Although in case of Open eID and Web eID it is possible to use card readers with a dedicated PIN-pad, such readers are not currently available on the local market and there are very limited options to get such hardware from the global market.
+
+In case user's device is controlled by malware, the question arises whether the malware can use the authentication or signing functionalities without user interaction. When access to the private key operations is protected with a PIN code, the question is whether the malware is able to use the corresponding API without the user interaction. This is not possible when ID card is used with a PIN-firewalled PIN-pad-based reader. But when the smart card is directly connected to the infected device, the answer is not straightforward and depends on the local API-s and of the operating system in use. Thus, we give a recommendation in Section~\ref{rec:modeling-runtime-environment} to further study such issues.
+
+
+
+\section{Session hijacking attacks}
+\label{sec:session_hijacking}
+The session identifier acts as a shared secret between the client and the service provider so that the service provider can link the user to the session. Thus, after a successful authentication, the user is assigned a session identifier. As usually the user is authenticated once during the session, it is assumed that the protective measures are sufficient to protect the session identifier from being leaked during an active session. However, when an attacker can somehow access an active session identifier, it can lead to a session hijacking attack.
+
+Session hijacking is an attack which allows an attacker to access the victim's active session by reusing the captured session identifier (e.g., cookie, token), which is linked to the victim. Once the attacker has obtained access to the session identifier, it is difficult to prevent the attack as most of the mainstream authentication protocols/standards do not offer protection against session hijacking. 
+
+In order to prevent session hijacking, the service provider would have to be able to verify the identity of the client by other means besides the session identifier. The standard approach is to use public key cryptography by asking the client to prove that it can use its secret key. The other approaches like matching client's IP and user agent, or frequently changing session identifiers are hacks, which are used to make the attack more difficult\footnote{\url{https://cheatsheetseries.owasp.org/cheatsheets/Session\_Management\_Cheat\_Sheet.html\#binding-the-session-id-to-other-user-properties}}. 
+
+The two well known technologies, which use public key cryptography to prevent session hijacking attacks, are TLS-CCA, which is described in the beginning of Chapter~\ref{chapter:TLS-CCA}, and Token Binding, which is briefly described in Section~\ref{sec:token_binding}. Other authentication technologies like Mobile-ID\footnote{\url{https://www.id.ee/index.php?id=36881}}, Smart-ID\footnote{\url{https://www.smart-id.com/}}, PIN-calculator (passcode device / security token), or OpenID Connect are only used during the authentication phase, and after that the session identifier is usually protected by TLS. WebAuthn\footnote{\url{https://www.w3.org/TR/webauthn/}} and FIDO2 can prevent the session hijacking attacks when used together with Token Binding\footnote{\url{https://fidoalliance.org/fido-technote-the-growing-role-of-token-binding/}}. However, Token Binding is currently not supported by any of the mainstream browsers as discussed in Section~\ref{sec:token_binding}. Therefore, TLS-CCA is currently the only mainstream technology that provides sufficient protection against session hijacking.
+
+Although the mainstream authentication technologies do not prevent session hijacking on their own, the threat can be mitigated in most cases (except for a targeted attack) by using proper configuration and security measures to prevent the leakage of the session identifier. There are four main ways for accessing the session identifiers:
+\begin{itemize}
+	\item malware on victim's device,
+	\item cross-site scripting vulnerability on the service provider's web site, 
+	\item session fixation vulnerability, 
+	\item vulnerability which allows to intercept the traffic that contains the session identifier.
+\end{itemize}
+To prevent session fixation, the service provider has to update the session identifier after the user has authenticated. The session identifier has to be sufficiently random to prevent it from being guessed. The session identifier must be transported between the client and the server over a channel that is protected by TLS. However, the used TLS version and configuration also affect the security. The service provider's web site must have protective measures that prevent cross-site scripting attacks by properly escaping and encoding user input. Building such functionality is non-trivial, and thus it is usually provided by the framework which is used to build the web site. However, the protective measures are not necessarily active by default, and thus may need to be manually switched on. To offer additional protection against cross-site scripting and other common vulnerabilities, the session cookie has to have the following flags: HttpOnly, Secure, SameSite\footnote{\url{https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.htm\#security-risks}}. Unfortunately, the service provider can not protect user's session in case user's device is infected by malware.
+
+
+
+
+
+
+\chapter{Protection against man-in-the-middle attacks}\label{sec:protection_profiles}
+The proposed architecture specifies two ways of how the service provider can configure the protection against man-in-the-middle attacks. The simpler method, which is briefly described in Section~\ref{sec:origin_validation} is based on origin validation and is therefore easy to implement, but this comes with a higher risk for an attack. Origin validation does not protect against powerful man-in-the-middle attacks where the attacker is simultaneously able to do DNS-spoofing and provide a valid TLS certificate for client's browser.
+
+The alternative method, which is described in Section~\ref{sec:cert_validation} forces the client to sign the service provider's certificate, thereby allowing the service provider to detect interference in case a wrong certificate is signed by the client. While in theory the certificate validation based method provides protection against powerful man-in-the-middle attacks during the authentication phase, it is non-trivial to implement and can currently be used only with Firefox. 
+
+We also describe a third approach in Section~\ref{sec:challenge_signing}, which is based on the service provider signing the challenge, but this method is not implemented in the new architecture. Regardless of the chosen architecture, some risks regarding MITM attacks remain. These are described in Section~\ref{sec:mitm_risks_mitigations} along with possible mitigation measures.
+
+Therefore, the service provider should make the choice of the protective measures based on a risk analysis.
+
+\section{Origin validation}
+\label{sec:origin_validation}
+The origin validation architecture is based on WebAuthn\footnote{\url{https://www.w3.org/TR/webauthn-1/}} authentication process. In WebAuthn, the client has to sign the challenge sent by the web service along with the origin, i.e., the hostname of the web service. Thus, a man-in-the-middle attack should be prevented by the web service who checks that the correct origin is signed by the client.
+
+However, an attacker who has access to a maliciously issued certificate for the given web service and is also able to perform DNS spoofing can easily bypass origin validation. Such attacks usually require a certificate authority to be compromised and are therefore unlikely to happen. However, the same risk applies to connections that are being legitimately monitored by corporate proxies. With such an attack the whole authenticated session is vulnerable and the corresponding communication can be intercepted and modified by the attacker. The attack could be initiated for any new TLS session negotiation in order to capture the session identifier that was previously created when the client authenticated to the web service. In addition, the malcious man-in-the-middle attacker could replace the hash value that is being sent to be digitally signed by the client browser, thereby creating a risk for the client to blindly issue a digital signature.
+
+As mentioned previously, the probability of a certificate authority being compromised is low. However, the main risk comes from local man-in-the-middle attacks as origin validation does not detect and prevent a local MITM done by a middlebox, antivirus or malware. Therefore, in case of origin validation, corporate proxies become a single point of failure. An attacker or a compromised employee abusing the corporate proxy can intercept the session tokens and can replace the hash values that are being sent to be digitally signed by the client. 
+
+It is important to note that Certificate Transparency may not apply to locally issued certificates as it is in the case of Google Chrome\footnote{\url{https://groups.google.com/a/chromium.org/forum/\#!msg/ct-policy/wHILiYf31DE/iMFmpMEkAQAJ}}. Thus, it is possible to debug origin validation based architecture with a MITM based testing tool like Burp Suite\footnote{\url{https://portswigger.net/burp}}.
+
+Although the threat of man-in-the-middle attack is not fully mitigated, the approach may be sufficient for web services that do not require the highest level of security. In addition, the threat can be partially mitigated by relying on Certificate Transparency.
+
+
+\section{Certificate validation}
+\label{sec:cert_validation}
+The certificate validation architecture takes origin validation as a basis and adds protection against powerful man-in-the-middle attacks where the attacker is simultaneously able to do DNS-spoofing and provide a valid TLS certificate for client's browser. With this approach the client signs the challenge, origin and the fingerprint of the certificate of the corresponding web service.
+
+The web service must check if the signed information received from the client contains the correct certificate fingerprint. In case it does, the client used the correct certificate to establish the TLS connection. When the signed fingerprint does not match, the server has detected an attack and aborts the connection.
+
+The difficulty with this approach lays in proxies which terminate the TLS connection. Multiple TLS certificates may be available for a given domain. The web service has to get access to the correct TLS certificate in order to verify the certificate fingerprint. Thus, the service provider has to make sure that the certificate is both available and up to date to prevent self inflicted denial of service attack in case the TLS certificate is replaced.
+
+This approach prevents the usage of local MITM by a middlebox, antivirus or malware during the authentication phase. Therefore, certificate validation based architecture offers protection against local interception, which offers higher level protection than mainstream authentication technologies. This measure can also be provided by certificate pinning or by using TLS-CCA. However, the downside is that the information exchanged during authentication phase can not be easily debugged with a MITM based testing tool like Burp Suite\footnote{\url{https://portswigger.net/burp}}.
+
+While certificate validation based authentication protects against powerful MITM attacks, it does this only during the authentication phase. Even protecting the authentication queries is non-trivial as the browser extension uses two different TLS sessions to initiate the authentication and to deliver the signed response to the service provider. Thus, the extension has to check that the second TLS session is established with the same party. To do this, the extension has to store a reference to the previous certificate and check whether the server certificate in the second TLS connection matches the previously seen certificate. It is crucial that the certificate is validated before the signed challenge is sent out as otherwise the man-in-the-middle would get access to the session. Even when this problem is solved, the rest of the authenticated session is vulnerable to a MITM attack in case the same session identifier is reused in a new TLS connection.
+
+Currently only Mozilla's Firefox provides an API that allows to apply the certificate validation based protection profile. As the majority of mainstream browsers are built on top of Google's Chromium, Google's representative was contacted in order to inquire about the possibility extend Chromium's API so that the aforementioned man-in-the-middle attacks could be avoided. The representative of Google responded that such measures are not in plan and are most likely not going to be implemented. One of the reasons is that a significant percentage of web traffic goes through corporate middleboxes\footnote{\url{https://blog.cloudflare.com/monsters-in-the-middleboxes/}}, which need to perform man-in-the-middle interception in order to scan traffic~\cite{DBLP:conf/ndss/DurumericMSBSBB17}.
+
+
+\section{An alternative approach: signing the challenge}
+\label{sec:challenge_signing}
+MITM attack against the authentication phase could also be mitigated if the service provider would sign the challenge sent to the client. With this approach, the client must be able to verify that the signed challenge is either directly or indirectly connected with the TLS certificate. I.e., either the challenge is signed by the private key that corresponds to the certificate, or the private key of the certificate would be used to delegate trust to a new key pair. The idea is to bind the TLS certificate to the challenge and thereby prevent the MITM from forwarding a different certificate to the client. In case of a MITM attack, the service provider would be able to verify both signatures and detect an attack. As this approach requires more configuration from the service provider to make the private key associated with the TLS certificate available to the service, it is not implemented in the first version of the new architecture.
+
+
+\section{Remaining risks and possible mitigations}
+\label{sec:mitm_risks_mitigations}
+As previously mentioned, the proposed architecture is not able to prevent MITM attacks in case a new TLS session is established after the authentication phase. While there are multiple options for mitigation, these approaches may not be practically feasible and are not guaranteed to work in all scenarios.
+
+The simplest option is to rely on Certificate Transparency, which is briefly described in Section~\ref{sec:certificate_transparency}. However, Certificate Transparency is not yet supported by all mainstream browsers. Nevertheless, its preventive aspect deters attacks that scale. Still, targeted attacks can not be ruled out.
+
+Certificate Authority Authorization (CAA) provides website owners a way to specify in a DNS record, which certificate authorities are allowed to issue certificates for the corresponding domain~\cite{rfc8659}. The usage of CAA should reduce the risk of certificate authorities accidentally issuing certificates for an attacker. However, it does not prevent targeted attacks in case a certificate authority is compromised.
+
+In addition, the service provider may only allow one TLS session per authenticated session such that TLS resumption would be the backup option when the client loses connection. This approach is technically non-trivial to implement and may not be practical. More information about this approach can be found in Section~\ref{sec:tls_resumption}.
+
+The fourth option would be to keep a local reference of the original TLS certificate used during the authentication phase in the Web eID browser extension. Thus, for each new TLS connection the fetched certificate should be matched with the previously stored certificate. Implementing this in practice is non-trivial, and therefore this approach will not implemented in the first version of the new browser extension. 
+
+Currently only Firefox provides an API that allows to query information about the TLS session, including the used certificate\footnote{\url{https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/webRequest/getSecurityInfo}}. To implement local MITM protection, access to such an API is crucial. However, testing the Firefox API revealed that the certificate information can be queried only after a request has already been sent. Thus, while the API allows to detect MITM attacks it can not prevent a request being sent out to the middleman. The implication is that the authentication token can be delivered before detecting the attack. This could be mitigated if the API would allow to cancel requests based on the queried TLS configuration. However, even detecting a MITM attack is a step forward. The issue does not create a significant new vulnerability as session hijacking is also possible after the authentication phase as mentioned in Section~\ref{sec:cert_validation}. Thus, to prevent session hijacking the whole authenticated session would have to be protected against it.
+
+In addition, the service provider also has to make sure that its certificate is revoked in case the corresponding private key leaks. However, revoking by itself is not sufficient as the information also has to reach the client as otherwise MITM attack may become possible. Fortunately, OCSP stapling with the Must-Staple flag resolves this issue. This approach is described in Section~\ref{sec:ocsp_stapling}.

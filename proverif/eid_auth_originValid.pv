@@ -1,0 +1,415 @@
+(*
+Protocol parties:
+ - User
+ - Server
+ - OCSP is melted into the Server
+ - CA      -- certification authority
+ - JS      -- JavaScript application running in the browser
+ - EID     -- Web eID native application
+ - SCard   -- eID smart card
+*)
+
+(* the attacker cannot match different data types *)
+set ignoreTypes = false.
+
+type party.
+type pkey.
+type skey.
+type pin.
+type certU.
+type certSW.
+type certSS.
+type ip.
+type signature.
+
+(* public channel *)
+free net : channel.
+
+(* this special channel is only needed to model read-only TLS, and is not a real channel *)
+free createTlsChannel : channel [private].
+
+(* TLS channel between two parties *)
+(* A TLS channel with server authentication *)
+(* Arguments: a nonce, and the public key of the server. *)
+(* The nonce is sent to the server encrypted with its public key *)
+fun tls(bitstring,pkey) : channel.
+
+
+(* private channel between user and "JavaScript application" *)
+fun channel_User_JS(party) : channel [private].
+
+(* private channel between "JavaScript application" and "Web eID native application" *)
+fun channel_JS_EID(party) : channel [private].
+
+(* private channel between user and "Web eID native application" *)
+fun channel_User_EID(party) : channel [private].
+
+(* private channel between "Web eID native application" and "eID smart card" *)
+fun channel_EID_SCard(party) : channel [private].
+
+
+(* certificate function, can only be issued by CA *)
+fun certUser(party,pkey) : certU [private].
+reduc forall A : party, PK : pkey; readcertU(certUser(A,PK)) = (A,PK).
+
+fun certServerWeak(party,pkey) : certSW [private].
+reduc forall A : party, PK : pkey; readcertSW(certServerWeak(A,PK)) = (A,PK).
+
+fun certServerStrong(party,pkey) : certSS [private].
+reduc forall A : party, PK : pkey; readcertSS(certServerStrong(A,PK)) = (A,PK).
+
+(* we model a weaker attacker by assigning a write-only channel for IP that does not belong to the attacker *)
+fun dnsChannel(ip) : channel [private].
+reduc forall IP : ip; readDns(dnsChannel(IP)) = IP.
+
+(* some constant messages *)
+free getCertificate : bitstring.
+free consent : bitstring.
+free needPIN : bitstring.
+free ok : bitstring.
+free authRequest : bitstring.
+free challenge : bitstring.
+
+(* hash function *)
+fun hash(bitstring) : bitstring.
+
+(* Signatures *)
+fun pk(skey): pkey.
+fun sign(skey, bitstring): signature.
+reduc forall M: bitstring, K: skey; verifySignature(pk(K), sign(K,M),M) = true.
+reduc forall M: bitstring, K: skey; extractMessage(sign(K,M)) = M.
+
+(* Public key cryptography (used only to model TLS) *)
+fun encrypt(pkey, bitstring): bitstring.
+reduc forall M: bitstring, K: skey; decrypt(K, encrypt(pk(K),M)) = M.
+
+(* Table of smart cards *)
+table smartCards(party,skey,certU,pin).
+(* Table of honest servers *)
+table honestServers(party,skey,ip).
+(* DNS table *)
+table dnsTable(party,ip).
+(* Table of honest users *)
+table honestUsers(party).
+(* Table of PINs for smart cards of honest users *)
+table honestUsersPINs(party,pin).
+(* Table of valid user certificates that OCSP holds *)
+table ocsp(certU).
+
+(* Declare events *)
+event honest(party).
+event honestPK(party,pkey).
+
+event fakeServerCert(party).
+event dnsPoisonedName(party).
+
+event carelessUser(party).
+
+event signedBySCard(party,bitstring).
+
+event beginUser(party,party).
+event endUser(party,party).
+
+event tlsJS(party,party,bitstring).
+event tlsServer(party,party,bitstring).
+
+event endServer(party,party,bitstring).
+event endJS(party,party,bitstring,pkey).
+
+event test().
+(*query A : party, S : party, event(honest(S)) && event(endUser(A,S)).
+query A : party, S : party, N : bitstring, PK : pkey; event(honest(A)) && event(honest(S)) && event(endJS(A,S,N,PK)).
+query A : party, S : party, PK : pkey, N : bitstring; event(honest(A)) && event(endServer(A,S,N)).
+query A : party, M : bitstring; event(honest(A)) && event(signedBySCard(A,M)).
+*)
+
+(* Impersonating User *)
+
+(* If a server approves an honest user's session, then indeed that user's smartcard was used to sign the hash of that session. *)
+query A : party, S : party, N : bitstring, PKS : pkey; event(honest(A)) && inj-event(endServer(A,S,N)) ==> inj-event(signedBySCard(A,hash((S,N)))).
+
+(* If a server approves an honest user's session, then the user is aware of that. *)
+(* The query returns FALSE if we do not link the inserted PIN to a correct session. *)
+(* query A : party, S : party, N : bitstring; event(honest(A)) && event(endServer(A,S,N)) ==> event(beginUser(A,S)). *)
+
+(* The same query returns TRUE if the PIN inserted by the user is linked to the server identity. *)
+query A : party, S : party, N : bitstring; event(honest(A)) && inj-event(endServer(A,S,N)) ==> inj-event(beginUser(A,S)) || event(carelessUser(A)).
+
+
+(* If the server authenticates A, then A is indeed on the other end of TLS pipe. *)
+(* The same query returns FALSE without additional assumptions or protection mechanisms *)
+(* query A : party, S : party, TlsNonce : bitstring; event(honest(A)) && event(tlsServer(A,S,TlsNonce)) ==> event(tlsJS(A,S,TlsNonce)). *)
+
+(* The same query returns TRUE if creating fake server certs is not possible. *)
+query A : party, S : party, TlsNonce : bitstring; event(honest(A)) && event(tlsServer(A,S,TlsNonce)) ==> event(tlsJS(A,S,TlsNonce)) || event(fakeServerCert(S)).
+
+(* The same query returns TRUE if DNS poisoning is not possible. *)
+query A : party, S : party, TlsNonce : bitstring; event(honest(A)) && event(tlsServer(A,S,TlsNonce)) ==> event(tlsJS(A,S,TlsNonce)) || event(dnsPoisonedName(S)).
+
+
+(* Impersonating Server *)
+
+(* The following query returns FALSE, as indeed an attacker may claim to be an honest server *)
+(* query A : party, S : party, PK : pkey, N : bitstring; event(honest(S)) && event(endJS(A,S,N,PK)) ==> event(endServer(A,S,N)). *)
+
+(* Alternatively, if the browser is convinced that the pk used in generation of TLS was the honest server's one, then the authentication is indeed confirmed by the server. So even if the user does not know which session exactly was accepted, the browser does know it. *)
+query A : party, S : party, PK : pkey, N : bitstring; event(honestPK(S,PK)) && inj-event(endJS(A,S,N,PK)) ==> inj-event(endServer(A,S,N)).
+
+(* Alternatively, if the browser reads server's IP address from non-ponsoined DNS, then the authentication is indeed confirmed by the server. So even if the user does not know which session exactly was accepted, the browser does know it. *)
+query A : party, S : party, PK : pkey, N : bitstring; event(honest(S)) && inj-event(endJS(A,S,N,PK)) ==> inj-event(endServer(A,S,N)) || event(dnsPoisonedName(S)).
+
+(* As far as certificate of S has not been falsified, if the user thinks that he has been authenticated, then ineed the server S has approved it as well. *)
+query A : party, S : party, PK : pkey, N : bitstring; event(honest(S)) && event(endUser(A,S)) ==> event(endServer(A,S,N)) || event(fakeServerCert(S)).
+
+(* This query returns FALSE, as the user can only be sure that the server S approved 'some' session. This is because we do not show the nonce to the user. This is not a problem, since it does not matter for the user which one of the sessions was accepted. *)
+(* query A : party, S : party, PK : pkey, N : bitstring; event(honest(S)) && inj-event(endUser(A,S)) ==> inj-event(endServer(A,S,N)) ||event(fakeServerCert(S)). *)
+
+(* Fake signatures *)
+
+(* if a smart card has signed something (in scope of our protocol), the user is aware of it, unless there is no visual check *)
+query A : party, S : party, N : bitstring, PKS : pkey; event(signedBySCard(A,hash((S,N)))) ==> event(beginUser(A,S)) || event(carelessUser(A)).
+
+(* The following query returns FALSE, as the user's PIN can be reused to create the same signature several times *)
+(* That is, after A interacted with an honest S using nonce N, the attacker may convince a smart card that the same session has been started again *)
+(* Although it would only enable to sign the same message multiple times, it might potentially make some signature forging attacks easier *)
+(* This seems more like ProVerif issue than a real attack, as the honest EID will prompt the PIN several times even if the message to be signed is the same *)
+(* query A : party, S : party, N : bitstring, PKS : pkey; event(honest(A)) && event(honest(S)) && inj-event(signedBySCard(A,hash((S,N)))) ==> inj-event(beginUser(A,S)) || event(carelessUser(A)). *)
+
+(* All TLS channels are transparent *)
+(* A weaker attacker may only accept TLS requests sent to his physical address *)
+let readTLS =
+    in(createTlsChannel, (IP : ip, TlsNonce : bitstring, PKS : pkey));
+    out(dnsChannel(IP), encrypt(PKS, TlsNonce));
+    (!(in(tls(TlsNonce,PKS), Msg : bitstring) ; out(net, Msg))).
+
+(* we may have an unbounded number of honest users *)
+(* each honest user is issued exactly one personal smart card *)
+let honestUserGenerator =
+    new A : party;
+    event honest(A);
+
+    new SKA : skey;
+    new PIN : pin;
+    let Cert = certUser(A,pk(SKA)) in
+
+    insert ocsp(Cert);
+    insert smartCards(A,SKA,Cert,PIN);
+    insert honestUsers(A);
+    insert honestUsersPINs(A,PIN);
+
+    (* let everyone know all public keys *)
+    out(net,(A,pk(SKA)));
+    0.
+
+(* we may have an unbounded number of honest servers *)
+(* each honest server is issued a public key *)
+(* we assume that there is no trusted server certification, so malicious server generation is trivial *)
+let honestServerGenerator =
+    new S : party;
+    new SKS : skey;
+    new IP : ip;
+
+    (* in some cases, the user may be convinced in advance that the public key belongs to an honest server *)
+    insert honestServers(S,SKS,IP);
+    insert dnsTable(S,IP);
+
+    event honest(S);
+    event honestPK(S,pk(SKS));
+
+    (* let everyone know all public keys *)
+    out(net, (IP, certServerWeak(S,pk(SKS))));
+    0.
+
+(* attacker can use this to generate himself smart cards *)
+(* we allow it only for new names, so that no impersonation is possible *)
+let maliciousUserGenerator =
+    new A : party;
+
+    (* the attacker may choose the secret key himself *)
+    (* we do not need to model a PIN, as it is used internally on user's side anyway *)
+    (* we only need that OCSP would accept the malicious user's identity *)
+    in(net, SKA : skey);
+    let Cert = certUser(A,pk(SKA)) in
+
+    insert ocsp(Cert);
+
+    (* the attacker learns his new identity *)
+    out(net, A);
+    out(net, channel_User_JS(A));
+    out(net, channel_JS_EID(A));
+    0.
+
+(* User  -- we do not model malicious user interacting with an honest web application *)
+let processUser =
+
+    (* The attacker decides who plays User role *)
+    get honestUsers(A : party) in
+
+    (* The attacker chooses the Server with whom User communicates *)
+    in(net, S : party);
+
+    out(channel_User_JS(A), S);                                          (* send    (1) *)
+    in (channel_User_EID(A), (=needPIN, =S, N : bitstring));             (* receive (5) *)
+    get honestUsersPINs(=A,PIN : pin) in
+    event beginUser(A,S);
+
+    (* let us split the cases with and without visual check, to include both in the analysis *)
+    in(net, B : bool);
+    if B then (
+        out(channel_User_EID(A), (PIN,S,N));                             (* send    (6) *)
+        in(channel_User_JS(A), (=S,=ok));
+        event endUser(A,S)
+    ) else (
+        event carelessUser(A);
+        out(channel_User_EID(A), PIN);                                   (* send    (6) *)
+        in(channel_User_JS(A), (=S,=ok));
+        event endUser(A,S)
+    ).
+
+(* JS -- can be malicious. It is more like a proxy, and we avoid doing additional operations here, delegating them to EID *)
+let processJS =
+
+    (* The attacker decides who plays User role *)
+    get honestUsers(A : party) in
+
+    in (channel_User_JS(A), S : party);             (* receive (1) *)
+
+    (* TLS handshake *)
+    in(net, ServerWeakCert : certSW);
+    let (=S,PKS : pkey) = readcertSW(ServerWeakCert) in
+    get dnsTable(=S,IP : ip) in
+    new TlsNonce : bitstring;
+    event tlsJS(A,S,TlsNonce);
+    out(createTlsChannel, (IP, TlsNonce, PKS));
+
+
+    out(tls(TlsNonce,PKS), authRequest);               (* send    (2) *)
+    in (tls(TlsNonce,PKS), (=challenge,N : bitstring));(* receive (3) *)
+
+    out(channel_JS_EID(A), (authRequest,S,IP,ServerWeakCert,N)); (* send    (4)  *)
+    in (channel_JS_EID(A), (UserCert : certU, Token : bitstring, Signature : signature));
+                                                             (* receive (12) *)
+    out(tls(TlsNonce,PKS), (UserCert, Token, Signature));    (* send    (13) *)
+
+    in (tls(TlsNonce, PKS), (=ok, =(A,N)));                  (* receive (17) *)
+    out(channel_User_JS(A), (S,ok));
+    event endJS(A,S,N,PKS);
+    0.
+
+(* EID  -- always honest, as a malicious EID would learn user's PIN code *)
+let processEID =
+
+    (* The attacker decides who plays User role *)
+    get honestUsers(A : party) in
+    in (channel_JS_EID(A), (=authRequest,S : party, IP : ip, ServerWeakCert : certSW, N : bitstring)); (* receive ( 4) *)
+    out(channel_User_EID(A), (needPIN, S, N));                                                         (* send    ( 5) *)
+
+    (* let us split the cases with and without visual check, to include both in the analysis *)
+    in(net, B : bool);
+    new SID : bitstring;
+    let Token = hash((S,N)) in                             (*         ( 9) *)
+    if B then (
+        in (channel_User_EID(A), (PIN : pin,=S,=N));       (* receive ( 6) *)
+        out(channel_EID_SCard(A), getCertificate);         (* send    ( 7) *)
+        in (channel_EID_SCard(A), UserCert : certU);       (* receive ( 8) *)
+
+        out(channel_EID_SCard(A), (SID, Token, PIN));              (* send    (10) *)
+        in (channel_EID_SCard(A), (=SID, Signature : signature));  (* receive (11) *)
+        out(channel_JS_EID(A), (UserCert,Token,Signature))         (* send    (12) *)
+    ) else (
+        in (channel_User_EID(A), PIN : pin);               (* receive ( 6) *)
+        out(channel_EID_SCard(A), getCertificate);         (* send    ( 7) *)
+        in (channel_EID_SCard(A), UserCert : certU);       (* receive ( 8) *)
+
+        out(channel_EID_SCard(A), (SID, Token, PIN));              (* send    (10) *)
+        in (channel_EID_SCard(A), (=SID, Signature : signature));  (* receive (11) *)
+        out(channel_JS_EID(A), (UserCert,Token,Signature))         (* send    (12) *)
+    ).
+
+(* Smart Card  -- always honest, as there is no need to model a bad one *)
+let processSCard =
+
+    (* The attacker decides who plays User role *)
+    (* SmartCard is a device that holds the secret key and the corresponding certificate of that user *)
+    get honestUsers(A : party) in
+    get smartCards(=A, SKA : skey, UserCert : certU, PIN : pin) in
+
+    (* in reality, certificate request and signing take place in parallel *)
+    (!(
+        in (channel_EID_SCard(A), =getCertificate);        (* receive ( 5) *)
+        out(channel_EID_SCard(A), UserCert)                (* send    ( 6) *)
+    )) | (!(
+        in (channel_EID_SCard(A), (SID : bitstring, M : bitstring, =PIN));  (* receive (14) *)
+        let Signature = sign(SKA,M) in
+        event signedBySCard(A,M);
+        out(channel_EID_SCard(A), (SID, Signature))                     (* send    (15) *)
+    )).
+
+(* Server *)
+let processServer =
+
+    (* The attacker chooses Server's identity *)
+    get honestServers(S : party, SKS : skey, IP : ip) in
+    let PKS = pk(SKS) in
+    let ServerWeakCert = certServerWeak(S,PKS) in
+
+    (* TLS handshake *)
+    in(dnsChannel(IP), EncTlsNonce : bitstring);
+    let TlsNonce = decrypt(SKS, EncTlsNonce) in
+
+    in(tls(TlsNonce, PKS), =authRequest);                (* receive ( 2) *)
+    new N : bitstring;
+    out(tls(TlsNonce, PKS), (challenge,N));              (* send    ( 3) *)
+
+    in(tls(TlsNonce,PKS), (UserCert : certU, Token : bitstring, Signature : signature));
+                                                         (* receive    (13) *)
+
+    let (A : party, PKA : pkey) = readcertU(UserCert) in (*            ( 9) *)
+    if verifySignature(PKA, Signature, Token) then
+    let (=hash((S,N))) = Token in
+
+    (* is the cert valid? all valid certificates, for which a smart card was actually issued, are in the table ocsp *)
+    get ocsp(=UserCert) in                                           (* send    (15) *)
+                                                                     (* receive (16) *)
+
+    event endServer(A,S,N);
+    event tlsServer(A,S,TlsNonce);
+    out(tls(TlsNonce, PKS), (ok, (A,N)));                            (* send    (17) *)
+    0.
+
+let corruptedCA =
+    in(net, S : party);
+    in(net, PKS : pkey);
+    event fakeServerCert(S);
+    out(net, certServerWeak(S,PKS)).
+
+(* an honest DNS service *)
+let honestDNS =
+    new S : party;
+    new IP : ip;
+    insert dnsTable(S,IP);
+    out(net, (S,IP,dnsChannel(IP))).
+
+(* an poisoned DNS service *)
+let poisonedDNS =
+    in(net, S : party);
+    new IP : ip;
+    event dnsPoisonedName(S);
+    insert dnsTable(S,IP);
+    out(net, (S,IP,dnsChannel(IP))).
+
+let writeToDnsChannel =
+    in(net, (IP : ip, M : bitstring));
+    out(dnsChannel(IP), M).
+
+(* the main process *)
+process
+        (* real party processes *)
+	((!processUser) | (!processJS) | (!processEID) | (!processSCard) | (!processServer)
+        (* helpful functions for modeling TLS and DNS *)
+        | (!readTLS) | (!honestDNS)  | (!poisonedDNS) | (!writeToDnsChannel)
+        (* attacker may obtain server certificates from here *)
+        | (!corruptedCA)
+        (* generation of secret keys and certificates *)
+        | (!honestUserGenerator) | (!honestServerGenerator) | (!maliciousUserGenerator))
+

@@ -1,0 +1,79 @@
+\RequirePackage[hyphens]{url} %fixes overflowing url-s in footnotes
+\documentclass[en-lang,rdf-logo]{cyber-technical}
+\usepackage[utf8]{inputenc}
+\usepackage{hyperref}
+\usepackage{scrextend}
+\addtokomafont{labelinglabel}{\bfseries}
+
+% Document metadata
+\CyberDefineDocumentNumber{T-176-1}
+\CyberDefineDocumentVersion{1.3}
+\CyberDefineDocumentSecurity{}
+\CyberDefineBackofTitlePage{\copyright\ Cybernetica, \the\year}
+\CyberDefineCopyrightFooter{}
+
+\setcounter{secnumdepth}{3}
+
+\newcommand{\todo}[1]{\textbf{[TODO: #1]}}
+\newcommand{\research}[1]{\textbf{[Further research needed: #1]}}
+\newcommand{\discuss}[1]{\textbf{[Has to be discussed: #1]}}
+\newcommand{\remark}[1]{\textbf{[Remark: #1]}}
+
+
+\begin{document}
+
+	\title{Analysis of planned architectural changes in Open-eID}
+
+	\maketitle
+
+~
+
+\vfill
+
+\begin{tabular}{ll}
+Project leaders:		& Tõnis Reimo (Estonian Information System Authority)\\
+						& Sandhra-Mirella Valdma (Cybernetica)\\
+Contributing authors: 	& Kristjan Krips (Cybernetica)\\
+						& Mart Oruaas (Cybernetica)\\
+						& Alisa Pankova (Cybernetica)\\
+						& Jan Willemson (Cybernetica)\\
+\end{tabular}
+
+Estonian Information System Authority, Pärnu maantee 139a, 15169 Tallinn, Estonia.\\
+Email: \href{mailto:ria@ria.ee}{ria@ria.ee}, Web: \url{https://www.ria.ee},
+Phone: +372 663 0200.
+
+Cybernetica AS, Mäealuse 2/1, 12618 Tallinn, Estonia.\\
+E-mail: \href{mailto:info@cyber.ee}{info@cyber.ee}, Web: \url{https://www.cyber.ee},
+Phone: +372 639 7991.
+
+\textcopyright~Estonian Information System Authority, 2020
+
+\clearpage 
+
+	\setcounter{tocdepth}{3}
+	\tableofcontents{}
+
+	\cleardoublepage
+
+	\input{sections/executive_summary.tex}
+	\input{sections/introduction.tex}
+	\input{sections/technologies.tex}
+	\input{sections/tls-cca_comparison.tex}
+	\input{sections/threats-components.tex}
+	\input{sections/threats-threats.tex}
+	\input{sections/threats-assumptions.tex}
+	\input{sections/discussion.tex}
+
+	\appendix
+
+	\input{sections/appendixA.tex}
+
+
+\bibliographystyle{plain}
+\bibliography{sections/webextensions}
+\end{document}
+
+
+
+
